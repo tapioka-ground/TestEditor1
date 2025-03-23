@@ -12,50 +12,51 @@ class CanvasView(QGraphicsView):
     def __init__(self, parent=None, bg_color="#FFFFFF"):
         super().__init__(parent)
 
-        # シーンを作成してビューにアタッチ
+
         self.scene = QGraphicsScene(self)
         self.setScene(self.scene)
 
-        # 背景色を QColor で渡す！
+
         self.setBackgroundBrush(QColor(bg_color))
 
-        # アンチエイリアスやスムース描画を有効に
+        self.color_paint = "#FFFFFF"
+        self.color_font = "#FFFFFF"
+
+
         self.setRenderHints(self.renderHints() | QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
 
-                # --- お絵描きモード用 ---
-        self.edit_mode = False  # 編集モードON/OFF
-        self.drawing = False  # 線を描いている最中か
-        self.current_path = None  # 現在の線データ
-        self.current_item = None  # シーンに追加した描画オブジェクト
-        self.pen_color = QColor("red")  # 線の色（自由に変えられる！）
-        self.pen_width = 3  # 線の太さ
+
+        self.edit_mode = False
+        self.drawing = False
+        self.current_path = None
+        self.current_item = None
+        self.pen_color = QColor(self.color_paint)
+        self.pen_width = 5
 
 
 
 
-        # スクロールハンド有効に（ドラッグで動く）
+
         self.setDragMode(QGraphicsView.ScrollHandDrag)
 
         self.edit_mode = False
         self.current_tool = None  # None, 'arrow', 'text'
 
     def clear_canvas(self):
-        """シーン内をクリア"""
         self.scene.clear()
 
     def add_image(self, pixmap: QPixmap, position=(0, 0)):
-        """画像をシーンに追加"""
         item = QGraphicsPixmapItem(pixmap)
         item.setPos(*position)
         self.scene.addItem(item)
 
     def add_spacer(self, width, position=(0, 0)):
-        """スペーサーの代わりに透明な矩形でも追加できる"""
-        # 透明な矩形は後で考えてOK。とりあえずXオフセットだけ動かせばよい
+
+        # 透明
         pass
 
     def set_scene_rect(self, width, height):
-        """シーンのサイズを設定"""
+
         self.scene.setSceneRect(0, 0, width, height)
 
     def setcanvasmode(self, mode_name):
@@ -65,24 +66,24 @@ class CanvasView(QGraphicsView):
         is_edit = (self.current_tool == "edit")
         is_text = (self.current_tool == "text")
         for item in self.scene.items():
-            # 画像アイテムはそのまま（今までの処理）
+
             if isinstance(item, QGraphicsPixmapItem):
                 item.setFlag(QGraphicsPixmapItem.ItemIsSelectable, is_edit)
                 item.setFlag(QGraphicsPixmapItem.ItemIsMovable, is_edit)
 
-            # テキストアイテムの場合
+            # テキストアイテム
             if isinstance(item, QGraphicsTextItem):
-                # editモード → 選択/移動はOK、編集はNG
+                # editモード
                 if is_edit:
                     item.setTextInteractionFlags(Qt.NoTextInteraction)
                     item.setFlag(QGraphicsTextItem.ItemIsSelectable, True)
                     item.setFlag(QGraphicsTextItem.ItemIsMovable, True)
-                # textモード → 編集OK、選択/移動OK
+                # textモード
                 elif is_text:
                     item.setTextInteractionFlags(Qt.TextEditorInteraction)
                     item.setFlag(QGraphicsTextItem.ItemIsSelectable, True)
                     item.setFlag(QGraphicsTextItem.ItemIsMovable, True)
-                # それ以外 → 編集も選択も禁止（必要なら）
+                # それ以外
                 else:
                     item.setTextInteractionFlags(Qt.NoTextInteraction)
                     item.setFlag(QGraphicsTextItem.ItemIsSelectable, False)
@@ -182,34 +183,32 @@ class CanvasView(QGraphicsView):
             rect = QRectF(start_point, end_point).normalized()
             print(rect)
 
-            # ガイド削除
             self.scene.removeItem(self.temp_rect_item)
             self.temp_rect_item = None
             self.text_start_point = None
 
             if rect.width() < 10 or rect.height() < 10:
-                print("小さすぎるので無視！")
+                print("小さすぎるので無視")
                 return
 
             # テキストアイテム作成
             text_item = QGraphicsTextItem("テキストを入力")
             from PySide6.QtGui import QFont
-            font = QFont("Meiryo", 40)  # フォント名とサイズ（例: メイリオ）
+            font = QFont("Meiryo", 40)
             font.setBold(True)
             text_item.setFont(font)
-            text_item.setTextInteractionFlags(Qt.TextEditorInteraction)  # ダブルクリックで編集
+            text_item.setTextInteractionFlags(Qt.TextEditorInteraction)
             text_item.setPos(rect.topLeft())
             text_item.setTextWidth(rect.width())
-            text_item.setDefaultTextColor(QColor("blue"))#フォントカラー
-
+            text_item.setDefaultTextColor(QColor(self.color_font))
             text_item.setFlag(QGraphicsTextItem.ItemIsSelectable, True)
             text_item.setFlag(QGraphicsTextItem.ItemIsMovable, True)
-            text_item.setFocus()  # フォーカスを与えるとカーソル(Iビーム)が出る！
+            text_item.setFocus()  # フォーカスdeIビームが出る！
 
 
             self.scene.addItem(text_item)
 
-            print(f"テキストボックス追加: {rect}")
+            print(f"テキストボックス {rect}")
 
 
 
@@ -224,3 +223,14 @@ class CanvasView(QGraphicsView):
         painter.end()
 
         image.save(filename)
+
+    def export_scene_to_pixmap(self):
+        rect = self.scene.sceneRect()
+        image = QImage(int(rect.width()), int(rect.height()), QImage.Format_ARGB32)
+        image.fill(Qt.white)
+
+        painter = QPainter(image)
+        self.scene.render(painter)
+        painter.end()
+
+        return QPixmap.fromImage(image)

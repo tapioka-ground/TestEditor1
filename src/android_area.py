@@ -1,90 +1,88 @@
-import subprocess
-import io
-from PIL import Image
 from PySide6.QtWidgets import QWidget, QLabel, QVBoxLayout
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtGui import QPixmap, QImage
+from src.capture_thread import Capture_Thread
 
 class AndroidCaptureArea(QWidget):
-    def __init__(self):
+    def __init__(self, parent_window=None):
         super().__init__()
 
-        # Android画面表示用
-        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
-        self.setStyleSheet("background-color: black; border: 5px solid gray;")
+        self.parent_window = parent_window
 
-        # レイアウトとラベル
+        self.original_width = 1000
+        self.original_height = 400
+
         self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+
         self.image_label = QLabel("接続中...")
         self.image_label.setAlignment(Qt.AlignCenter)
         self.layout.addWidget(self.image_label)
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_android_screen)
-        self.setGeometry(200, 200, 1000, 400)  # 初期サイズ（あとで調整）
 
-    def update_android_screen(self):
-        """ADBで実機のスクリーンショットを取得して表示"""
-        try:
-            # adbでスクショ取得（PNGバイナリ）
-            result = subprocess.run(
-                ["adb", "exec-out", "screencap", "-p"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=5
-            )
+        self.last_capture_image = None
 
-            if result.returncode != 0:#接続失敗
-                print("ADB接続エラー:", result.stderr.decode())
-                self.image_label.setText("接続中...")
-                return
+        self.thread = QThread()    #ADB用スレっど
+        self.worker = Capture_Thread()
+        self.worker.moveToThread(self.thread)
 
-            # 画像データをPILで読み込み
-            image_data = result.stdout
-            pil_image = Image.open(io.BytesIO(image_data))
-            width, height = pil_image.size
-            self.setFixedSize(width, height)
+        self.thread.started.connect(self.worker.start_loop)
+        self.worker.image_ready.connect(self.update_android_screen)
+        self.worker.error.connect(self.show_error)
 
-            qt_image = self.pil_to_qimage(pil_image)
-            pixmap = QPixmap.fromImage(qt_image)
-            self.image_label.setPixmap(pixmap)
-            self.image_label.setFixedSize(width, height)
-            print("表示ループなう")
+        self.worker.device_name_set.connect(self.path_device_name)
 
-        except Exception as e:
-            print("スクリーン取得エラー:", e)
+    def path_device_name(self,name):
+        print(name + "が接続されました")
+        self.parent_window.change_device_name(name)
+
+
+    def get_image(self,):
+        return self.last_capture_image
+
+
+
+
+    def start_androidmode(self):
+        print("キャプチャ開始")
+        self.thread.start()
+
+    def stop_androidmode(self):
+        print("キャプチャ終わり")
+        self.worker.stop_loop()
+        self.thread.quit()
+        self.thread.wait()
+
+    def update_android_screen(self, pil_image):
+        self.last_capture_image = pil_image
+        qt_image = self.pil_to_qimage(pil_image)
+
+        self.original_width, self.original_height = pil_image.size
+
+        pixmap = QPixmap.fromImage(qt_image)
+        self.image_label.setPixmap(pixmap)
+
+        #検討中まだいらん
+        self.parentWidget().parentWidget()
+        self.parent_window.resize_android_capture()
+        width, height = pil_image.size
+        self.setFixedSize(width, height)
+        self.image_label.setPixmap(pixmap)
+        self.image_label.setFixedSize(width, height)
+
+    def show_error(self, message):
+        print("エラー:", message)
+        self.image_label.setText("接続中...")
 
     def pil_to_qimage(self, pil_image):
-        """PIL.Image → QImage 変換"""
         pil_image = pil_image.convert("RGB")
         width, height = pil_image.size
         data = pil_image.tobytes("raw", "RGB")
         return QImage(data, width, height, QImage.Format_RGB888)
 
-    def get_image(self):
-        """ADBから直接スクリーンショットを取得して返す"""
-        try:
-            result = subprocess.run(
-                ["adb", "exec-out", "screencap", "-p"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=5
-            )
-            if result.returncode != 0:
-                print("ADB接続エラー:", result.stderr.decode())
-                return None
-            image_data = result.stdout
-            pil_image = Image.open(io.BytesIO(image_data))
-
-            return pil_image
-        except Exception as e:
-            print("スクリーン取得エラー:", e)
-            return None
 
 
-    def start_androidmode(self,):
-        self.timer.start(1000)
-        print("start")
 
-    def stop_androidmode(self,):
-        self.timer.stop()
-        print("stop")
+    def create_DB(self,):
+
+        self.worker.get_db_signal.emit()
+

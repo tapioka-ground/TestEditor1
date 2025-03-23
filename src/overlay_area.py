@@ -8,8 +8,7 @@ class OverlayCaptureArea(QWidget):
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setGeometry(200, 200, 600, 400)
-
+#仮
     def get_area(self):
-        """キャプチャ範囲を返す"""
         geometry: QRect = self.geometry()
         return geometry.x(), geometry.y(), geometry.width(), geometry.height()

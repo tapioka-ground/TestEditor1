@@ -1,11 +1,16 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QFileDialog)
-from PySide6.QtCore import Qt, QRectF, QPointF
-from PySide6.QtGui import QPixmap, QColor, QPainter
+    QPushButton, QFileDialog, QApplication
+)
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QIcon, QPixmap
 from PIL import ImageQt
 from src.canvas_view import CanvasView
-from src.android_area import AndroidCaptureArea
+from src.backlog_submit import BacklogSubmit
+from datetime import datetime
+import os
+import tempfile
+
 
 class EditorWindow(QMainWindow):
     def __init__(self, app_manager):
@@ -14,81 +19,114 @@ class EditorWindow(QMainWindow):
         self.app_manager = app_manager
         self.setWindowTitle("Editor")
 
-        self.window_sizeX = 1000
-        self.window_sizeY = 600
-        self.setGeometry(600, 100, self.window_sizeX, self.window_sizeY)
-
-        # 背景カラー（外側のウィンドウ）
         self.window_bg_color = "#444444"
 
-        self.main_widget = QWidget()
-        self.main_layout = QVBoxLayout(self.main_widget)
-        self.setCentralWidget(self.main_widget)
 
-        self.main_widget.setStyleSheet(f"background-color: {self.window_bg_color};")
-        self.canvas_bg_color = "#FFFFFF"#canvasvueをせってい
-        self.canvas_view = CanvasView(self, bg_color=self.canvas_bg_color)
-        self.main_layout.addWidget(self.canvas_view)
 
-        self.current_mode = "none" # これedit,draw,arrow,textに分かれるよ
+        screen = QApplication.primaryScreen()
+        screen_size = screen.size()
+        screen_width = screen_size.width()
+        screen_height = screen_size.height()
 
-        # ヘッダーWidget
+        target_width = int(screen_width * 0.6)
+        target_height = int(screen_height * 0.9)
+
+        self.resize(target_width, target_height)
+
+
+
+
+
+
+
+
+
+
+        self.central_widget = QWidget()
+        self.central_layout = QVBoxLayout(self.central_widget)
+        self.central_layout.setContentsMargins(0, 0, 0, 0)
+        self.central_layout.setSpacing(0)
+        self.central_widget.setStyleSheet(f"background-color: {self.window_bg_color};")
+        self.setCentralWidget(self.central_widget)
+
+        self.create_header()
+        self.create_canvas()
+
+        self.current_mode = "none"
+
+
+    def create_header(self):
         self.header_widget = QWidget()
         self.header_layout = QHBoxLayout(self.header_widget)
+        self.header_layout.setContentsMargins(10, 5, 10, 5)
+        self.header_layout.setSpacing(10)
+        self.header_widget.setStyleSheet("background-color: #212121;")
 
-        # 編集モード切り替え
-        self.edit_button = QPushButton("編集モード")
-        self.edit_button.clicked.connect(lambda: self.set_mode("edit"))
+        self.left_widget = QWidget()
+        self.left_layout = QHBoxLayout(self.left_widget)
+        self.left_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_layout.setSpacing(5)
+        self.left_layout.setAlignment(Qt.AlignLeft)
 
-        # 戻る
-        self.back_button = QPushButton("戻る")
-        self.back_button.clicked.connect(lambda: self.test())
+        self.back_button = self.add_toolbar_button(self.left_layout, "back", self.test)
+        self.edit_button = self.add_toolbar_button(self.left_layout, "edit", lambda: self.set_mode("edit"))
 
-        # 鉛筆
-        self.draw_button = QPushButton("お絵描き")
-        self.draw_button.clicked.connect(lambda: self.set_mode("draw"))
+        self.center_widget = QWidget()
+        self.center_layout = QHBoxLayout(self.center_widget)
+        self.center_layout.setContentsMargins(0, 0, 0, 0)
+        self.center_layout.setSpacing(5)
+        self.center_layout.setAlignment(Qt.AlignCenter)
 
-        # 矢印
-        self.arrow_button = QPushButton("矢印挿入")
-        self.arrow_button.clicked.connect(lambda: self.set_mode("arrow"))
+        self.draw_button = self.add_toolbar_button(self.center_layout, "draw", lambda: self.set_mode("draw"))
+        self.arrow_button = self.add_toolbar_button(self.center_layout, "arrow", lambda: self.set_mode("arrow"))
+        self.text_button = self.add_toolbar_button(self.center_layout, "text", lambda: self.set_mode("text"))
 
-        # テキスト
-        self.text_button = QPushButton("テキスト挿入")
-        self.text_button.clicked.connect(lambda: self.set_mode("text"))
+        self.right_widget = QWidget()
+        self.right_layout = QHBoxLayout(self.right_widget)
+        self.right_layout.setContentsMargins(0, 0, 0, 0)
+        self.right_layout.setSpacing(5)
+        self.right_layout.setAlignment(Qt.AlignRight)
 
-        # エクスポート
-        self.export_button = QPushButton("エクスポート")
-        self.export_button.clicked.connect(lambda: self.export_canvas())
+        self.export_button = self.add_toolbar_button(self.right_layout, "export", self.export_canvas)
+        self.backlog_button = self.add_toolbar_button(self.right_layout, "backlog", self.send_backlog)
 
-        # 投稿
-        self.backlog_button = QPushButton("バックログ投稿")
-        self.backlog_button.clicked.connect(lambda: self.test())
+        self.header_layout.addWidget(self.left_widget, 1)
+        self.header_layout.addWidget(self.center_widget, 1)
+        self.header_layout.addWidget(self.right_widget, 1)
+
+        self.central_layout.addWidget(self.header_widget)
 
 
+    def create_canvas(self):
+        self.canvas_view = CanvasView(self, bg_color="#FFFFFF")
+        self.central_layout.addWidget(self.canvas_view)
 
-        self.header_layout.addWidget(self.edit_button)
-        self.header_layout.addWidget(self.back_button)
-        self.header_layout.addWidget(self.draw_button)
-        self.header_layout.addWidget(self.arrow_button)
-        self.header_layout.addWidget(self.text_button)
-        self.header_layout.addWidget(self.export_button)
-        self.header_layout.addWidget(self.backlog_button)
+    def add_toolbar_button(self, layout, icon_name, callback):
+        button = QPushButton()
+        button.setFixedSize(28, 28)
+        button.setIconSize(QSize(20, 20))
 
-        self.main_layout.insertWidget(0, self.header_widget)
+        icon = QIcon(f"src/svgt/{icon_name}.svg")
+        button.setIcon(icon)
+
+        button.setStyleSheet("""
+            QPushButton {
+                background-color: #272727;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #444444;
+            }
+        """)
+        button.clicked.connect(callback)
+        layout.addWidget(button)
+        return button
 
     def set_mode(self, modename):
         self.current_mode = modename
-        print(self.current_mode)
+        print(f"モード切り替え: {modename}")
         self.canvas_view.setcanvasmode(self.current_mode)
-
-
-
-
-
-
-
-
-
 
     def export_canvas(self):
         filename, _ = QFileDialog.getSaveFileName(self, "エクスポート", "", "PNG Files (*.png)")
@@ -97,24 +135,19 @@ class EditorWindow(QMainWindow):
             print(f"画像を保存しました: {filename}")
 
 
+    def send_backlog(self):
+        print("バックログに投稿")
+
+        pixmap = self.canvas_view.export_scene_to_pixmap()
+
+        self.backlog_window = BacklogSubmit(self.app_manager, pixmap)
+        self.backlog_window.show()
 
 
+    def test(self):
+        print("戻る")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    def update_canvas(self, image_dict, padding): #ここからした全部キャプチャ系。構成ミスってるだろ
+    def update_canvas(self, image_dict, padding):
         self.canvas_view.clear_canvas()
 
         x_offset = padding
@@ -122,7 +155,6 @@ class EditorWindow(QMainWindow):
         self.block_width = 200
         max_row_height = 0
         max_total_width = 0
-
 
         for image_id, data in image_dict.items():
             if data == "":
@@ -140,6 +172,7 @@ class EditorWindow(QMainWindow):
             pixmap = QPixmap.fromImage(qt_image)
             if image_id == 0:
                 self.block_width = pixmap.width()
+
             self.canvas_view.add_image(pixmap, position=(x_offset, y_offset))
 
             x_offset += pixmap.width() + padding
@@ -153,6 +186,9 @@ class EditorWindow(QMainWindow):
         self.fit_canvas_to_window()
 
     def fit_canvas_to_window(self):
+        if not hasattr(self, 'canvas_view') or self.canvas_view is None:
+            return
+
         view = self.canvas_view
         scene_rect = view.scene.sceneRect()
         if not scene_rect.isNull():
@@ -161,5 +197,3 @@ class EditorWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.fit_canvas_to_window()
-
-

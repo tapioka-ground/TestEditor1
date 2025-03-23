@@ -1,10 +1,21 @@
 from src.ui_capture_window import CaptureWindow
 from src.ui_editor_window import EditorWindow
+from PySide6.QtWidgets import QMessageBox ,QApplication
 import time
 
 
 class AppManager:
+    _instance = None#シングルトンにしてます
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
     def __init__(self):
+        if self._initialized:
+            return
+        self._initialized = True
         self.capture_window = None
         self.editor_window = None
         self.canvas_image_list = {}
@@ -68,13 +79,18 @@ class AppManager:
 
             self.editor_window.update_canvas(self.canvas_image_list, self.block_padding)
 
-    def delete_iamge(self,):
+    def delete_image(self,):
         if self.tap_checker() == True:
+            if not self.cheak_message("確認","全てのキャプチャを削除しますか？"):
+                return
             if self.image_index == 0:
                 print("ダメです")
                 return
             else:
-                print("ここリセット処理入れようか")
+                self.canvas_image_list = {}
+                self.image_index = 0
+                self.editor_window.update_canvas({0:""}, self.block_padding)
+                print("削除完了")
 
 
 
@@ -84,14 +100,35 @@ class AppManager:
 
     def capture_window_start(self):
         self.capture_window = CaptureWindow(self)
+        self.capture_window.move(0, 0)
         self.capture_window.show()
 
 
     def editor_window_start(self):
         self.editor_window = EditorWindow(self)
+        screen = QApplication.primaryScreen()
+        screen_width = screen.size().width()
+
+        window_width = self.editor_window.width()
+        self.editor_window.move(screen_width - window_width, 0)
         self.editor_window.show()
 
 
+
+    def cheak_message(self,title,messege):
+        msg_box = QMessageBox(self.capture_window)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(messege)
+        msg_box.setIcon(QMessageBox.Warning)
+        msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        result = msg_box.exec()
+
+        if result == QMessageBox.Yes:
+            print("はい")
+            return True
+        else:
+            print("いいえ")
+            return False
 
     def start_app(self):
         self.capture_window_start()
